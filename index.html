@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mundo das Pedras Pro Mobile - Multiplayer MQTT</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; touch-action: none; }
+
+        /* --- TELA DE CARREGAMENTO 1 --- */
+        #splash-screen {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #000 url('https://github.com/josesamuelazevedo930-sudo/sflick/raw/main/Screenshot_20260801-163929_Google.jpg') no-repeat center center;
+            background-size: cover;
+            z-index: 9999;
+            transition: opacity 0.8s ease;
+        }
+
+        /* --- TELA DE LOGIN / START --- */
+        #start-screen {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: url('https://github.com/josesamuelazevedo930-sudo/fotos.jpg/raw/main/file_000000004948820eb9442867f3c14989.png') no-repeat center center;
+            background-size: cover;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 9998;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.8s ease;
+            gap: 12px;
+        }
+        #start-screen.active {
+            opacity: 1; pointer-events: auto;
+        }
+
+        .login-box {
+            background: rgba(17, 17, 17, 0.85); padding: 20px; border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2); width: 280px; display: flex;
+            flex-direction: column; gap: 10px; text-align: center; color: #fff;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+        .login-box h2 { margin: 0 0 10px 0; font-size: 18px; color: #007bff; }
+        .login-box label { font-size: 12px; text-align: left; color: #aaa; }
+        .login-box input, .login-box select {
+            padding: 10px; background: rgba(34, 34, 34, 0.9); border: 1px solid #444;
+            color: #fff; border-radius: 6px; font-size: 14px; outline: none;
+        }
+
+        #start-btn {
+            margin-top: 10px; padding: 12px; font-size: 16px; font-weight: bold; color: #fff;
+            background: #007bff; border: none; border-radius: 6px;
+            cursor: pointer; box-shadow: 0 0 10px rgba(0, 123, 255, 0.6);
+            transition: transform 0.2s, background 0.2s;
+        }
+        #start-btn:active { transform: scale(0.95); background: #0056b3; }
+
+        /* --- ESTILOS DO JOGO --- */
+        #touch-camera-zone { position: absolute; top: 0; right: 0; width: 60vw; height: 100vh; z-index: 10; display: none; }
+        .top-bar { position: absolute; top: 10px; right: 10px; display: none; gap: 6px; z-index: 101; }
+        .ui-btn { padding: 8px 12px; color: white; border: none; font-weight: bold; border-radius: 6px; font-size: 11px; box-shadow: 0 2px #000; cursor: pointer; }
+        #s-btn { background: #007bff; }
+        #h-btn { background: #ff3333; }
+        #i-btn { background: #28a745; }
+        #voice-btn { background: #17a2b8; }
+
+        /* --- CHAT BOTÃO E PAINEL --- */
+        #chat-toggle-btn {
+            position: absolute; top: 10px; left: 10px; z-index: 102; display: none;
+            background: #ff9900; color: #fff; border: none; padding: 8px 12px;
+            border-radius: 6px; font-weight: bold; font-size: 11px; box-shadow: 0 2px #000; cursor: pointer;
+        }
+        #chat-panel {
+            position: absolute; top: 45px; left: 10px; width: 260px; height: 220px;
+            background: rgba(0, 0, 0, 0.85); border: 1px solid #444; border-radius: 8px;
+            display: none; flex-direction: column; z-index: 102; padding: 8px; gap: 6px;
+        }
+        #chat-history {
+            flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
+            font-size: 11px; color: #fff; text-align: left; padding-right: 4px;
+        }
+        .chat-msg { background: rgba(255,255,255,0.1); padding: 4px 6px; border-radius: 4px; word-break: break-word; }
+        .chat-msg b { color: #007bff; }
+        #chat-input-container { display: flex; gap: 4px; }
+        #chat-input-container input {
+            flex: 1; margin: 0; padding: 6px; font-family: sans-serif; font-size: 11px;
+            background: #222; border: 1px solid #444; color: #fff; border-radius: 4px;
+        }
+        #chat-send-btn {
+            background: #28a745; border: none; color: white; padding: 6px 10px;
+            font-weight: bold; font-size: 11px; border-radius: 4px; cursor: pointer;
+        }
+
+        .zoom-ctrl { position: absolute; right: 10px; top: 50px; display: none; flex-direction: column; gap: 5px; z-index: 101; }
+        .btn-zoom { width: 32px; height: 32px; background: rgba(0,0,0,0.6); color: white; border: 1px solid #fff; border-radius: 6px; font-size: 16px; font-weight: bold; }
+
+        .panel { 
+            position: absolute; right: 10px; top: 90px; width: 240px; background: rgba(0,0,0,0.92); 
+            border-radius: 8px; padding: 10px; color: white; border: 1px solid #444; z-index: 102; 
+            display: none; max-height: 70vh; overflow-y: auto; font-size: 11px;
+        }
+        .opt { width: 100%; padding: 8px; margin: 3px 0; border: none; background: #333; color: white; border-radius: 4px; text-align: left; font-size: 10px; font-weight: bold; cursor: pointer; }
+        .item-row { display: flex; align-items: center; gap: 5px; }
+        .del-btn { background: #ff3333; border: none; color: white; border-radius: 4px; padding: 4px 8px; font-weight: bold; }
+        input, textarea { 
+            width: 100%; padding: 8px; margin-bottom: 8px; border-radius: 4px; border: none; 
+            background: #222; color: #fff; font-size: 11px; font-family: monospace;
+        }
+        textarea { resize: vertical; min-height: 90px; }
+
+        #jump-btn { 
+            position: absolute; bottom: 30px; right: 25px; width: 70px; height: 70px; 
+            background: rgba(255, 255, 255, 0.4); border: 3px solid #fff; border-radius: 50%; 
+            color: #fff; font-weight: 900; display: none; align-items: center; justify-content: center; 
+            z-index: 101; font-size: 13px; text-shadow: 0 1px 2px #000; touch-action: manipulation;
+        }
+        #jump-btn:active { background: rgba(255, 255, 255, 0.7); }
+
+        #joystick-container {
+            position: absolute; bottom: 30px; left: 25px; width: 110px; height: 110px;
+            background: rgba(0,0,0,0.25); border: 2px solid rgba(255,255,255,0.4);
+            border-radius: 50%; z-index: 101; touch-action: none; display: none;
+        }
+        #joystick-stick {
+            position: absolute; top: 35px; left: 35px; width: 40px; height: 40px;
+            background: rgba(255,255,255,0.7); border-radius: 50%;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5); pointer-events: none;
+        }
+
+        #loader { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: #000; color: #0f0; padding: 4px 12px; border-radius: 12px; z-index: 1000; font-size: 10px; display: none; }
+        
+        #room-info {
+            position: absolute; top: 10px; left: 110px; color: #fff; background: rgba(0,0,0,0.6);
+            padding: 6px 12px; border-radius: 6px; font-size: 11px; z-index: 101; display: none;
+        }
+
+        #default-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 4px;
+            padding: 2px;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="splash-screen"></div>
+
+    <div id="start-screen">
+        <div class="login-box">
+            <h2>MUNDO DAS PEDRAS</h2>
+            <label for="player-nick">Seu Nickname:</label>
+            <input type="text" id="player-nick" placeholder="Ex: GamerPro" maxlength="12">
+            
+            <label for="room-select">Escolha a Sala:</label>
+            <select id="room-select">
+                <option value="sala_1">Sala 1</option>
+                <option value="sala_2">Sala 2</option>
+                <option value="sala_3">Sala 3</option>
+                <option value="sala_4">Sala 4</option>
+            </select>
+            
+            <button id="start-btn" onclick="startGame()">CONECTAR E JOGAR</button>
+        </div>
+    </div>
+
+    <div id="loader">INICIALIZANDO MOTOR...</div>
+    
+    <button id="chat-toggle-btn" onclick="toggleChat()">💬 CHAT</button>
+    <div id="chat-panel">
+        <div id="chat-history"></div>
+        <div id="chat-input-container">
+            <input type="text" id="chat-text" placeholder="Digite uma mensagem..." maxlength="60">
+            <button id="chat-send-btn" onclick="sendChatMessage()">ENVIAR</button>
+        </div>
+    </div>
+
+    <div id="room-info">SALA: <span id="info-room-name">-</span> | JOGADORES: <span id="info-player-count">1</span></div>
+    <div id="touch-camera-zone"></div>
+
+    <div class="top-bar" id="game-ui-top">
+        <button id="s-btn" class="ui-btn" onclick="tgl('s-panel')">SKINS</button>
+        <button id="h-btn" class="ui-btn" onclick="tgl('h-panel')">HACK</button>
+        <button id="i-btn" class="ui-btn" onclick="tgl('i-panel')">IMPORTAR</button>
+        <button id="voice-btn" class="ui-btn" onclick="toggleVoice()">🎤 VOZ: OFF</button>
+    </div>
+
+    <div class="zoom-ctrl" id="game-ui-zoom">
+        <button class="btn-zoom" onclick="changeZoom(-3)">+</button>
+        <button class="btn-zoom" onclick="changeZoom(3)">-</button>
+    </div>
+
+    <div id="joystick-container">
+        <div id="joystick-stick"></div>
+    </div>
+
+    <div id="i-panel" class="panel">
+        <p style="margin-top:0; font-weight:bold; color:#0f0;">📦 DO GITHUB (MOTOR-3D)</p>
+        <input type="text" id="git-name" placeholder="Ex: bacon ou script1">
+        <button class="opt" onclick="processImport('skin')" style="background:#007bff;">📥 ADICIONAR SKIN (.glb)</button>
+        <button class="opt" onclick="processImport('map')" style="background:#ff8800;">🌍 ADICIONAR MAPA (.glb)</button>
+        <button class="opt" onclick="processImport('script')" style="background:#28a745;">📜 ADICIONAR SCRIPT (.txt)</button>
+
+        <hr style="border:0; border-top:1px solid #444; margin:12px 0;">
+
+        <p style="font-weight:bold; color:#0ff;">📁 SCRIPT LOCAL (CELULAR)</p>
+        <input type="file" id="local-script-file" accept=".txt,text/plain" style="margin-bottom:6px;">
+        <button class="opt" onclick="loadLocalScript()" style="background:#9b59b6;">📂 CARREGAR ARQUIVO .TXT</button>
+
+        <hr style="border:0; border-top:1px solid #444; margin:12px 0;">
+
+        <p style="font-weight:bold; color:#ff0;">⌨ DIGITAR / COLAR SCRIPT</p>
+        <textarea id="script-editor" placeholder="// Digite ou cole o código JavaScript aqui..."></textarea>
+        <button class="opt" onclick="runTypedScript()" style="background:#e67e22;">▶ EXECUTAR SCRIPT</button>
+
+        <hr style="border:0; border-top:1px solid #444; margin:12px 0;">
+        <button class="opt" onclick="clearAllData()" style="background:#666; text-align:center;">🗑️ APAGAR TUDO</button>
+    </div>
+
+    <div id="s-panel" class="panel">
+        <button class="opt" onclick="invertAnim()" style="background:#ff8800; margin-bottom:5px; text-align:center;">🔄 INVERTER ANIMAÇÃO</button>
+        <button class="opt" onclick="resetSkin()" style="background:#888888; text-align:center; margin-bottom:8px;">🗑 SKIN PADRÃO</button>
+        <p style="color:#aaa; margin:0 0 4px 0;">SKINS DISPONÍVEIS:</p>
+        <div id="default-list"></div>
+        <p style="color:#aaa; margin:8px 0 4px 0;">MINHAS SKINS:</p>
+        <div id="custom-skin-list"></div>
+    </div>
+    
+    <div id="h-panel" class="panel">
+        <button class="opt" onclick="scaleMap(1.2, true)" style="background:#444">➕ AUMENTAR MAPA</button>
+        <button class="opt" onclick="scaleMap(0.8, true)" style="background:#444">➖ DIMINUIR MAPA</button>
+        <hr style="border:0; border-top:1px solid #444; margin:5px 0;">
+        <button class="opt" onclick="toggleFly()" style="background:#ff3333">VOAR (ON/OFF)</button>
+        <button id="speed-btn" class="opt" onclick="toggleSpeed()" style="background:#cc9900">VELOCIDADE: NORMAL</button>
+        <button class="opt" onclick="respawn()" style="background:#007bff">RECOMEÇAR</button>
+        <p style="color:#aaa; margin:8px 0 4px 0;">MEUS MAPAS:</p>
+        <div id="custom-map-list"></div>
+        <p style="color:#aaa; margin:8px 0 4px 0;">MEUS SCRIPTS:</p>
+        <div id="custom-script-list"></div>
+    </div>
+
+    <div id="jump-btn">PULAR</div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/DRACOLoader.js"></script>
+
+    <script>
+        let scene, camera, renderer, player, mixer, clock = new THREE.Clock();
+        let mapModel, raycaster = new THREE.Raycaster(), loaderGLTF;
+        let keys = {}, velY = 0, grounded = false, camRot = 0, fly = false, camDist = 18, moveSpeed = 0.8;
+        let idleAction, walkAction, activeAction, animInverted = false;
+        let currentAnimState = 'idle';
+        let currentSkinUrl = "https://threejs.org/examples/models/gltf/Soldier.glb";
+        
+        let joyX = 0, joyY = 0, joyTouchId = null;
+        let camTouchId = null, lastTouchX = 0;
+        let gameStarted = false;
+
+        let mqttClient;
+        let playerId = "player_" + Math.random().toString(36).substr(2, 9);
+        let playerNick = "Player";
+        let roomTopic = "sala_1";
+        let remotePlayers = {};
+        
+        let localTagSprite = null;
+        let localSpeechTimeout = null;
+
+        // CHAT DE VOZ (WEBRTC)
+        let localStream = null;
+        let voiceActive = false;
+        let peerConnections = {};
+        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+        const REPO_BASE = "https://cdn.jsdelivr.net/gh/josesamuelazevedo930-sudo/MOTOR-3D@main/";
+        const GROUND_TEXTURE_URL = "https://cdn.jsdelivr.net/gh/josesamuelazevedo930-sudo/MOTOR-3D@main/perdras.jpg";
+
+        // 30 SKINS NO MENU
+        const defaultSkins = [
+            { n: "Soldado", u: "https://threejs.org/examples/models/gltf/Soldier.glb" },
+            { n: "Robô expressivo", u: "https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb" },
+            { n: "Abacate", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Avocado/glTF-Binary/Avocado.glb" },
+            { n: "Pato", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Duck/glTF-Binary/Duck.glb" },
+            { n: "Raposa", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Fox/glTF-Binary/Fox.glb" },
+            { n: "Cesium Man", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/CesiumMan/glTF-Binary/CesiumMan.glb" },
+            { n: "BrainStem", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/BrainStem/glTF-Binary/BrainStem.glb" },
+            { n: "Astronauta", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Astronaut/glTF-Binary/Astronaut.glb" },
+            { n: "Capacete Sci-Fi", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/DamagedHelmet/glTF-Binary/DamagedHelmet.glb" },
+            { n: "Cegonha", u: "https://threejs.org/examples/models/gltf/Stork.glb" },
+            { n: "Flamingo", u: "https://threejs.org/examples/models/gltf/Flamingo.glb" },
+            { n: "Papagaio", u: "https://threejs.org/examples/models/gltf/Parrot.glb" },
+            { n: "Cavalo", u: "https://threejs.org/examples/models/gltf/Horse.glb" },
+            { n: "Robô X-Bot", u: "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/gltf/Xbot.glb" },
+            { n: "Lantern", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Lantern/glTF-Binary/Lantern.glb" },
+            { n: "WaterBottle", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/WaterBottle/glTF-Binary/WaterBottle.glb" },
+            { n: "BoomBox", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/BoomBox/glTF-Binary/BoomBox.glb" },
+            { n: "Corsair", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Corsair/glTF-Binary/Corsair.glb" },
+            { n: "Anique Camera", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/AntiqueCamera/glTF-Binary/AntiqueCamera.glb" },
+            { n: "Toy Car", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/ToyCar/glTF-Binary/ToyCar.glb" },
+            { n: "Dragon Attenuation", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/DragonAttenuation/glTF-Binary/DragonAttenuation.glb" },
+            { n: "Alpha Centauri", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/AlphaBlendModeTest/glTF-Binary/AlphaBlendModeTest.glb" },
+            { n: "Flight Helmet", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/FlightHelmet/glTF-Binary/FlightHelmet.glb" },
+            { n: "Recursive Skeletons", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/SimpleSkinning/glTF-Binary/SimpleSkinning.glb" },
+            { n: "Gearbox", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/GearboxDiscrete/glTF-Binary/GearboxDiscrete.glb" },
+            { n: "Orientation Test", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/OrientationTest/glTF-Binary/OrientationTest.glb" },
+            { n: "Barramundi Fish", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/BarramundiFish/glTF-Binary/BarramundiFish.glb" },
+            { n: "Microphone", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Microphone/glTF-Binary/Microphone.glb" },
+            { n: "Glam Velvet Sofa", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/GlamVelvetSofa/glTF-Binary/GlamVelvetSofa.glb" },
+            { n: "Mosquito", u: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Mosquito/glTF-Binary/Mosquito.glb" }
+        ];
+
+        window.onload = () => {
+            setTimeout(() => {
+                const splash = document.getElementById('splash-screen');
+                splash.style.opacity = '0';
+                setTimeout(() => {
+                    splash.style.display = 'none';
+                    document.getElementById('start-screen').classList.add('active');
+                }, 800);
+            }, 2500);
+        };
+
+        function startGame() {
+            const nickInput = document.getElementById('player-nick').value.trim();
+            playerNick = nickInput !== "" ? nickInput : "Player_" + Math.floor(Math.random() * 1000);
+            roomTopic = "pedras_game/" + document.getElementById('room-select').value;
+
+            document.getElementById('info-room-name').innerText = document.getElementById('room-select').value.toUpperCase();
+
+            const startScreen = document.getElementById('start-screen');
+            startScreen.style.opacity = '0';
+            setTimeout(() => {
+                startScreen.style.display = 'none';
+                gameStarted = true;
+                
+                document.getElementById('touch-camera-zone').style.display = 'block';
+                document.getElementById('game-ui-top').style.display = 'flex';
+                document.getElementById('game-ui-zoom').style.display = 'flex';
+                document.getElementById('jump-btn').style.display = 'flex';
+                document.getElementById('joystick-container').style.display = 'block';
+                document.getElementById('room-info').style.display = 'block';
+                document.getElementById('chat-toggle-btn').style.display = 'block';
+
+                initEngine();
+                initMQTT();
+            }, 800);
+        }
+
+        /* --- CHAT E MULTIPLAYER (MQTT) --- */
+        function toggleChat() {
+            const chat = document.getElementById('chat-panel');
+            chat.style.display = chat.style.display === 'flex' ? 'none' : 'flex';
+            if (chat.style.display === 'flex') {
+                document.getElementById('chat-text').focus();
+            }
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById('chat-text');
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            displaySpeechBubble(playerId, playerNick, msg);
+
+            if (mqttClient && mqttClient.isConnected()) {
+                const payload = {
+                    type: "chat",
+                    id: playerId,
+                    nick: playerNick,
+                    text: msg
+                };
+                const message = new Paho.MQTT.Message(JSON.stringify(payload));
+                message.destinationName = roomTopic;
+                mqttClient.send(message);
+            }
+
+            input.value = "";
+        }
+
+        function appendChatMessage(nick, msg) {
+            const history = document.getElementById('chat-history');
+            const el = document.createElement('div');
+            el.className = 'chat-msg';
+            el.innerHTML = `<b>${nick}:</b> ${msg}`;
+            history.appendChild(el);
+            history.scrollTop = history.scrollHeight;
+        }
+
+        function displaySpeechBubble(targetId, nick, msg) {
+            appendChatMessage(nick, msg);
+
+            if (targetId === playerId) {
+                if (player) {
+                    if (localTagSprite) player.remove(localTagSprite);
+                    localTagSprite = createNameTag(playerNick, msg);
+                    player.add(localTagSprite);
+
+                    if (localSpeechTimeout) clearTimeout(localSpeechTimeout);
+                    localSpeechTimeout = setTimeout(() => {
+                        if (player && localTagSprite) {
+                            player.remove(localTagSprite);
+                            localTagSprite = createNameTag(playerNick);
+                            player.add(localTagSprite);
+                        }
+                    }, 3000);
+                }
+            } else if (remotePlayers[targetId]) {
+                let remote = remotePlayers[targetId];
+                if (remote.tagSprite) remote.group.remove(remote.tagSprite);
+                remote.tagSprite = createNameTag(nick, msg);
+                remote.group.add(remote.tagSprite);
+
+                if (remote.speechTimeout) clearTimeout(remote.speechTimeout);
+                remote.speechTimeout = setTimeout(() => {
+                    if (remote.group && remote.tagSprite) {
+                        remote.group.remove(remote.tagSprite);
+                        remote.tagSprite = createNameTag(nick);
+                        remote.group.add(remote.tagSprite);
+                    }
+                }, 3000);
+            }
+        }
+
+        function initMQTT() {
+            const host = "broker.hivemq.com";
+            const port = 8000;
+            
+            mqttClient = new Paho.MQTT.Client(host, port, "/mqtt", playerId);
+
+            mqttClient.onConnectionLost = (responseObject) => {
+                console.log("Conexão perdida:", responseObject.errorMessage);
+            };
+
+            mqttClient.onMessageArrived = (message) => {
+                try {
+                    const data = JSON.parse(message.payloadString);
+                    if (data.id !== playerId) {
+                        if (data.type === "chat") {
+                            displaySpeechBubble(data.id, data.nick, data.text);
+                        } else if (data.type === "map_change") {
+                            loadMap(data.url, false);
+                        } else if (data.type === "map_scale") {
+                            scaleMap(data.factor, false);
+                        } else if (data.type === "rtc_signal") {
+                            handleRtcSignal(data);
+                        } else {
+                            handleRemotePlayer(data);
+                        }
+                    }
+                } catch(e) {}
+            };
+
+            mqttClient.connect({
+                onSuccess: () => {
+                    mqttClient.subscribe(roomTopic);
+                    console.log("Conectado à sala:", roomTopic);
+                    setInterval(sendPlayerData, 66);
+                },
+                onFailure: (err) => {
+                    console.error("Falha ao conectar no broker MQTT:", err);
+                }
+            });
+        }
+
+        function sendPlayerData() {
+            if (!mqttClient || !mqttClient.isConnected() || !player) return;
+
+            const payload = {
+                type: "pos",
+                id: playerId,
+                nick: playerNick,
+                x: player.position.x,
+                y: player.position.y,
+                z: player.position.z,
+                rotY: player.rotation.y,
+                anim: currentAnimState,
+                skin: currentSkinUrl
+            };
+
+            const message = new Paho.MQTT.Message(JSON.stringify(payload));
+            message.destinationName = roomTopic;
+            mqttClient.send(message);
+        }
+
+        function broadcastMapChange(url) {
+            if (mqttClient && mqttClient.isConnected()) {
+                const payload = { type: "map_change", id: playerId, url: url };
+                const message = new Paho.MQTT.Message(JSON.stringify(payload));
+                message.destinationName = roomTopic;
+                mqttClient.send(message);
+            }
+        }
+
+        function broadcastMapScale(factor) {
+            if (mqttClient && mqttClient.isConnected()) {
+                const payload = { type: "map_scale", id: playerId, factor: factor };
+                const message = new Paho.MQTT.Message(JSON.stringify(payload));
+                message.destinationName = roomTopic;
+                mqttClient.send(message);
+            }
+        }
+
+        /* --- CHAT DE VOZ WEBRTC --- */
+        async function toggleVoice() {
+            const btn = document.getElementById('voice-btn');
+            if (!voiceActive) {
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                    voiceActive = true;
+                    btn.innerText = "🎤 VOZ: ON";
+                    btn.style.background = "#28a745";
+                    for (let targetId in remotePlayers) {
+                        initPeerConnection(targetId, true);
+                    }
+                } catch(err) {
+                    alert("Acesso ao microfone negado ou não suportado!");
+                }
+            } else {
+                voiceActive = false;
+                btn.innerText = "🎤 VOZ: OFF";
+                btn.style.background = "#17a2b8";
+                if (localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
+                    localStream = null;
+                }
+                for (let id in peerConnections) {
+                    peerConnections[id].close();
+                    delete peerConnections[id];
+                }
+            }
+        }
+
+        function sendRtcSignal(targetId, signal) {
+            if (mqttClient && mqttClient.isConnected()) {
+                const payload = { type: "rtc_signal", id: playerId, targetId: targetId, signal: signal };
+                const message = new Paho.MQTT.Message(JSON.stringify(payload));
+                message.destinationName = roomTopic;
+                mqttClient.send(message);
+            }
+        }
+
+        function initPeerConnection(targetId, isInitiator) {
+            if (peerConnections[targetId]) return peerConnections[targetId];
+
+            const pc = new RTCPeerConnection(rtcConfig);
+            peerConnections[targetId] = pc;
+
+            if (localStream) {
+                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+            }
+
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    sendRtcSignal(targetId, { candidate: event.candidate });
+                }
+            };
+
+            pc.ontrack = (event) => {
+                let audioEl = document.getElementById("audio_" + targetId);
+                if (!audioEl) {
+                    audioEl = document.createElement("audio");
+                    audioEl.id = "audio_" + targetId;
+                    audioEl.autoplay = true;
+                    document.body.appendChild(audioEl);
+                }
+                audioEl.srcObject = event.streams[0];
+            };
+
+            if (isInitiator) {
+                pc.createOffer().then(offer => {
+                    pc.setLocalDescription(offer);
+                    sendRtcSignal(targetId, { sdp: offer });
+                });
+            }
+
+            return pc;
+        }
+
+        async function handleRtcSignal(data) {
+            if (data.targetId !== playerId) return;
+            const targetId = data.id;
+
+            let pc = peerConnections[targetId];
+            if (!pc) pc = initPeerConnection(targetId, false);
+
+            if (data.signal.sdp) {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.signal.sdp));
+                if (data.signal.sdp.type === "offer") {
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    sendRtcSignal(targetId, { sdp: answer });
+                }
+            } else if (data.signal.candidate) {
+                await pc.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
+            }
+        }
+
+        function createNameTag(text, speechText = null) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = speechText ? 160 : 64;
+            const ctx = canvas.getContext('2d');
+
+            if (speechText) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+                ctx.beginPath();
+                ctx.roundRect(10, 10, 492, 80, 15);
+                ctx.fill();
+                ctx.strokeStyle = '#007bff';
+                ctx.lineWidth = 4;
+                ctx.stroke();
+
+                ctx.font = 'Bold 24px sans-serif';
+                ctx.fillStyle = '#000000';
+                ctx.textAlign = 'center';
+                let truncatedMsg = speechText.length > 35 ? speechText.substring(0, 32) + "..." : speechText;
+                ctx.fillText(truncatedMsg, 256, 58);
+
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(100, 100, 312, 50);
+                ctx.font = 'Bold 26px sans-serif';
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(text, 256, 135);
+            } else {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                ctx.fillRect(0, 0, 512, 64);
+                ctx.font = 'Bold 28px sans-serif';
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'center';
+                ctx.fillText(text, 256, 42);
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            
+            if (speechText) {
+                sprite.scale.set(16, 5, 1);
+                sprite.position.y = 12;
+            } else {
+                sprite.scale.set(12, 1.5, 1);
+                sprite.position.y = 10;
+            }
+            return sprite;
+        }
+
+        function handleRemotePlayer(data) {
+            let remote = remotePlayers[data.id];
+
+            if (!remote) {
+                let group = new THREE.Group();
+                scene.add(group);
+
+                let tag = createNameTag(data.nick);
+                group.add(tag);
+
+                remote = {
+                    group: group,
+                    model: null,
+                    mixer: null,
+                    tagSprite: tag,
+                    speechTimeout: null,
+                    idleAction: null,
+                    walkAction: null,
+                    activeAction: null,
+                    skinUrl: "",
+                    lastSeen: Date.now()
+                };
+                remotePlayers[data.id] = remote;
+
+                if (voiceActive) {
+                    initPeerConnection(data.id, true);
+                }
+            }
+
+            remote.lastSeen = Date.now();
+            remote.group.position.set(data.x, data.y, data.z);
+
+            if (remote.skinUrl !== data.skin) {
+                remote.skinUrl = data.skin;
+                if (remote.model) remote.group.remove(remote.model);
+
+                loaderGLTF.load(data.skin, (gltf) => {
+                    let m = gltf.scene;
+                    let box = new THREE.Box3().setFromObject(m);
+                    let s = 8 / (box.getSize(new THREE.Vector3()).y || 1);
+                    m.scale.set(s, s, s);
+                    remote.model = m;
+                    remote.group.add(m);
+
+                    remote.mixer = new THREE.AnimationMixer(m);
+                    if (gltf.animations.length > 0) {
+                        remote.idleAction = remote.mixer.clipAction(gltf.animations.find(a => a.name.toLowerCase().match(/idle|static/)) || gltf.animations[0]);
+                        remote.walkAction = remote.mixer.clipAction(gltf.animations.find(a => a.name.toLowerCase().match(/run|walk|move/)) || gltf.animations[gltf.animations.length-1]);
+                        remote.activeAction = remote.idleAction;
+                        remote.activeAction.play();
+                    }
+                });
+            }
+
+            if (remote.model) {
+                remote.model.rotation.y = data.rotY;
+
+                if (remote.mixer && remote.idleAction && remote.walkAction) {
+                    let next = (data.anim === 'walk') ? remote.walkAction : remote.idleAction;
+                    if (remote.activeAction !== next) {
+                        remote.activeAction.fadeOut(0.2);
+                        next.reset().fadeIn(0.2).play();
+                        remote.activeAction = next;
+                    }
+                }
+            }
+
+            document.getElementById('info-player-count').innerText = Object.keys(remotePlayers).length + 1;
+        }
+
+        function checkOfflinePlayers() {
+            let now = Date.now();
+            for (let id in remotePlayers) {
+                if (now - remotePlayers[id].lastSeen > 5000) {
+                    scene.remove(remotePlayers[id].group);
+                    if (peerConnections[id]) {
+                        peerConnections[id].close();
+                        delete peerConnections[id];
+                    }
+                    let audioEl = document.getElementById("audio_" + id);
+                    if (audioEl) audioEl.remove();
+                    delete remotePlayers[id];
+                    document.getElementById('info-player-count').innerText = Object.keys(remotePlayers).length + 1;
+                }
+            }
+        }
+
+        /* --- ENGINE 3D & CONTROLES --- */
+        function initEngine() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 4000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: false, precision: "lowp" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.body.appendChild(renderer.domElement);
+            scene.add(new THREE.AmbientLight(0xffffff, 2));
+
+            loaderGLTF = new THREE.GLTFLoader();
+            const draco = new THREE.DRACOLoader();
+            draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.1/');
+            loaderGLTF.setDRACOLoader(draco);
+
+            generateCustomProceduralMap();
+            renderDefaultSkins();
+            renderCustomAssets();
+            loadModel(defaultSkins[0].u);
+
+            setupControls();
+            setupScriptEditor();
+            animate();
+        }
+
+        function setupControls() {
+            const jBtn = document.getElementById('jump-btn');
+            jBtn.addEventListener('touchstart', (e) => { e.preventDefault(); jump(); });
+            jBtn.addEventListener('mousedown', jump);
+
+            window.addEventListener('keydown', (e) => { 
+                if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+                keys[e.code] = true; 
+                if(e.code === 'Space') jump(); 
+            });
+            window.addEventListener('keyup', (e) => { 
+                if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+                keys[e.code] = false; 
+            });
+
+            document.getElementById('chat-text').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    sendChatMessage();
+                }
+            });
+
+            const jContainer = document.getElementById('joystick-container');
+            const jStick = document.getElementById('joystick-stick');
+            const jRadius = 35;
+            const camZone = document.getElementById('touch-camera-zone');
+
+            window.addEventListener('touchstart', (e) => {
+                if (!gameStarted) return;
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    let touch = e.changedTouches[i];
+                    
+                    const rect = jContainer.getBoundingClientRect();
+                    if (touch.clientX >= rect.left - 20 && touch.clientX <= rect.right + 20 &&
+                        touch.clientY >= rect.top - 20 && touch.clientY <= rect.bottom + 20 && joyTouchId === null) {
+                        joyTouchId = touch.identifier;
+                        updateJoystick(touch, rect, jStick, jRadius);
+                    }
+                    
+                    const camRect = camZone.getBoundingClientRect();
+                    if (touch.clientX >= camRect.left && touch.clientY >= camRect.top && camTouchId === null) {
+                        camTouchId = touch.identifier;
+                        lastTouchX = touch.clientX;
+                    }
+                }
+            }, { passive: false });
+
+            window.addEventListener('touchmove', (e) => {
+                if (!gameStarted) return;
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    let touch = e.changedTouches[i];
+
+                    if (touch.identifier === joyTouchId) {
+                        const rect = jContainer.getBoundingClientRect();
+                        updateJoystick(touch, rect, jStick, jRadius);
+                    }
+
+                    if (touch.identifier === camTouchId) {
+                        let deltaX = touch.clientX - lastTouchX;
+                        camRot -= deltaX * 0.008;
+                        lastTouchX = touch.clientX;
+                    }
+                }
+            }, { passive: false });
+
+            const endTouchHandler = (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    let touch = e.changedTouches[i];
+                    if (touch.identifier === joyTouchId) {
+                        joyTouchId = null; joyX = 0; joyY = 0;
+                        jStick.style.transform = `translate(0px, 0px)`;
+                    }
+                    if (touch.identifier === camTouchId) {
+                        camTouchId = null;
+                    }
+                }
+            };
+
+            window.addEventListener('touchend', endTouchHandler);
+            window.addEventListener('touchcancel', endTouchHandler);
+        }
+
+        function updateJoystick(touch, rect, jStick, jRadius) {
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            let dx = touch.clientX - centerX;
+            let dy = touch.clientY - centerY;
+            let dist = Math.hypot(dx, dy);
+
+            if (dist > jRadius) {
+                dx = (dx / dist) * jRadius;
+                dy = (dy / dist) * jRadius;
+            }
+
+            jStick.style.transform = `translate(${dx}px, ${dy}px)`;
+            joyX = dx / jRadius; 
+            joyY = dy / jRadius; 
+        }
+
+        function setupScriptEditor() {
+            const editor = document.getElementById('script-editor');
+            editor.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    runTypedScript();
+                }
+            });
+        }
+
+        function loadLocalScript() {
+            const input = document.getElementById('local-script-file');
+            const file = input.files[0];
+            if (!file) return alert("Selecione um arquivo .txt primeiro");
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    eval(e.target.result);
+                    alert("✅ Script local executado com sucesso!");
+                } catch (err) { alert("❌ Erro no script:\n" + err.message); }
+            };
+            reader.readAsText(file);
+        }
+
+        function runTypedScript() {
+            const code = document.getElementById('script-editor').value.trim();
+            if (!code) return alert("Digite ou cole algum código primeiro");
+            try {
+                eval(code);
+                alert("✅ Script executado!");
+            } catch (err) { alert("❌ Erro no script:\n" + err.message); }
+        }
+
+        function generateCustomProceduralMap() {
+            if(mapModel) scene.remove(mapModel);
+            document.getElementById('loader').style.display = 'block';
+
+            mapModel = new THREE.Group();
+            const textureLoader = new THREE.TextureLoader();
+            textureLoader.setCrossOrigin('anonymous');
+            
+            textureLoader.load(GROUND_TEXTURE_URL, (texture) => {
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.repeat.set(100, 100);
+
+                const floor = new THREE.Mesh(
+                    new THREE.PlaneGeometry(4000, 4000),
+                    new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })
+                );
+                floor.rotation.x = -Math.PI / 2;
+                mapModel.add(floor);
+
+                createHouses(50);
+                scene.add(mapModel);
+                document.getElementById('loader').style.display = 'none';
+            }, undefined, () => {
+                const floor = new THREE.Mesh(
+                    new THREE.PlaneGeometry(4000, 4000),
+                    new THREE.MeshBasicMaterial({ color: 0x555555, side: THREE.DoubleSide })
+                );
+                floor.rotation.x = -Math.PI / 2;
+                mapModel.add(floor);
+                createHouses(50);
+                scene.add(mapModel);
+                document.getElementById('loader').style.display = 'none';
+            });
+        }
+
+        function createHouses(count) {
+            for(let i = 0; i < count; i++) {
+                const houseGroup = new THREE.Group();
+                const w = 15 + Math.random() * 10, h = 12 + Math.random() * 8, d = 15 + Math.random() * 10;
+
+                const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ color: 0xddcbbb }));
+                body.position.y = h / 2;
+                houseGroup.add(body);
+
+                const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.max(w, d) * 0.8, 8, 4), new THREE.MeshBasicMaterial({ color: 0x993333 }));
+                roof.position.y = h + 4;
+                roof.rotation.y = Math.PI / 4;
+                houseGroup.add(roof);
+
+                let posX = (Math.random() - 0.5) * 1500;
+                let posZ = (Math.random() - 0.5) * 1500;
+                if(Math.abs(posX) < 40) posX += 60;
+                if(Math.abs(posZ) < 40) posZ += 60;
+
+                houseGroup.position.set(posX, 0, posZ);
+                mapModel.add(houseGroup);
+            }
+        }
+
+        function loadMap(url, broadcast = true) {
+            if(mapModel) scene.remove(mapModel);
+            document.getElementById('loader').style.display = 'block';
+            loaderGLTF.load(url, (gltf) => {
+                mapModel = gltf.scene;
+                mapModel.scale.set(30, 30, 30);
+                scene.add(mapModel);
+                document.getElementById('loader').style.display = 'none';
+                if (broadcast) broadcastMapChange(url);
+            });
+        }
+
+        function loadModel(url) {
+            if(player) scene.remove(player);
+            currentSkinUrl = url;
+            loaderGLTF.load(url, (gltf) => {
+                player = gltf.scene;
+                player.position.set(0, 15, 0);
+                let box = new THREE.Box3().setFromObject(player);
+                let s = 8 / (box.getSize(new THREE.Vector3()).y || 1);
+                player.scale.set(s, s, s);
+                
+                localTagSprite = createNameTag(playerNick);
+                player.add(localTagSprite);
+
+                scene.add(player);
+                mixer = new THREE.AnimationMixer(player);
+                if(gltf.animations.length > 0) {
+                    idleAction = mixer.clipAction(gltf.animations.find(a => a.name.toLowerCase().match(/idle|static/)) || gltf.animations[0]);
+                    walkAction = mixer.clipAction(gltf.animations.find(a => a.name.toLowerCase().match(/run|walk|move/)) || gltf.animations[gltf.animations.length-1]);
+                    activeAction = idleAction; activeAction.play();
+                }
+            }, undefined, () => alert("Erro ao carregar modelo"));
+        }
+
+        function processImport(type) {
+            const name = document.getElementById('git-name').value.trim();
+            if(!name) return alert("Digite o nome!");
+            
+            const ext = type === 'script' ? '.txt' : '.glb';
+            const url = REPO_BASE + name + ext;
+            const storageKey = type === 'skin' ? 'customSkins' : (type === 'map' ? 'customMaps' : 'customScripts');
+            
+            let saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+            saved.push({ n: name, u: url });
+            localStorage.setItem(storageKey, JSON.stringify(saved));
+            
+            document.getElementById('git-name').value = "";
+            renderCustomAssets();
+
+            if (type === 'map') {
+                loadMap(url, true);
+            }
+        }
+
+        function renderCustomAssets() {
+            const sList = document.getElementById('custom-skin-list');
+            const mList = document.getElementById('custom-map-list');
+            const scList = document.getElementById('custom-script-list');
+            sList.innerHTML = ""; mList.innerHTML = ""; scList.innerHTML = "";
+
+            const skins = JSON.parse(localStorage.getItem('customSkins') || "[]");
+            skins.forEach((item, i) => createRow(sList, item, i, 'customSkins', () => loadModel(item.u)));
+
+            const maps = JSON.parse(localStorage.getItem('customMaps') || "[]");
+            maps.forEach((item, i) => createRow(mList, item, i, 'customMaps', () => loadMap(item.u, true)));
+
+            const scripts = JSON.parse(localStorage.getItem('customScripts') || "[]");
+            scripts.forEach((item, i) => createRow(scList, item, i, 'customScripts', () => runExternalScript(item.u)));
+        }
+
+        function createRow(container, item, index, key, action) {
+            let div = document.createElement('div');
+            div.className = 'item-row';
+            div.innerHTML = `<button class="opt" style="flex:1">${item.n}</button><button class="del-btn">X</button>`;
+            div.querySelector('.opt').onclick = action;
+            div.querySelector('.del-btn').onclick = () => {
+                let saved = JSON.parse(localStorage.getItem(key));
+                saved.splice(index, 1);
+                localStorage.setItem(key, JSON.stringify(saved));
+                renderCustomAssets();
+            };
+            container.appendChild(div);
+        }
+
+        function runExternalScript(url) {
+            fetch(url).then(r => r.text()).then(code => {
+                try { eval(code); alert("Script Executado!"); } 
+                catch(e) { alert("Erro no Script: " + e); }
+            }).catch(() => alert("Não foi possível ler o arquivo no GitHub"));
+        }
+
+        function renderDefaultSkins() {
+            const list = document.getElementById('default-list');
+            list.innerHTML = "";
+            defaultSkins.forEach(m => {
+                let b = document.createElement('button');
+                b.className = 'opt'; b.innerText = "👤 " + m.n;
+                b.onclick = () => { loadModel(m.u); tgl('s-panel'); };
+                list.appendChild(b);
+            });
+        }
+
+        function jump() { if(grounded || fly) { velY = 0.85; grounded = false; } }
+        function scaleMap(f, broadcast = true) { 
+            if(mapModel) {
+                mapModel.scale.multiplyScalar(f); 
+                if (broadcast) broadcastMapScale(f);
+            }
+        }
+        function toggleFly() { fly = !fly; velY = 0; }
+        function toggleSpeed() { 
+            moveSpeed = (moveSpeed < 1) ? 1.6 : 0.8; 
+            document.getElementById('speed-btn').innerText = moveSpeed > 1 ? "VELOCIDADE: RÁPIDO" : "VELOCIDADE: NORMAL";
+        }
+        function changeZoom(v) { camDist = Math.max(8, camDist + v); }
+        function tgl(id) { 
+            let p = document.getElementById(id); 
+            let vis = p.style.display === 'block';
+            document.querySelectorAll('.panel').forEach(x => x.style.display = 'none');
+            p.style.display = vis ? 'none' : 'block'; 
+        }
+        function respawn() { if(player) { player.position.set(0, 15, 0); velY = 0; } }
+        function resetSkin() { loadModel(defaultSkins[0].u); }
+        function invertAnim() { animInverted = !animInverted; }
+        function clearAllData() { if(confirm("Apagar tudo?")) { localStorage.clear(); renderCustomAssets(); } }
+
+        function fadeToAction(type) {
+            currentAnimState = type;
+            let next = (type === 'walk') ? walkAction : idleAction;
+            if (activeAction && next && activeAction !== next) {
+                activeAction.fadeOut(0.2);
+                next.reset().fadeIn(0.2).play();
+                activeAction = next;
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (!gameStarted) return;
+            
+            let d = clock.getDelta();
+            if(mixer) mixer.update(d);
+
+            for (let id in remotePlayers) {
+                if (remotePlayers[id].mixer) {
+                    remotePlayers[id].mixer.update(d);
+                }
+            }
+
+            checkOfflinePlayers();
+
+            if(player && mapModel) {
+                if(keys['ArrowLeft']) camRot += 0.04;
+                if(keys['ArrowRight']) camRot -= 0.04;
+
+                let f = new THREE.Vector3(-Math.sin(camRot), 0, -Math.cos(camRot));
+                let r = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), f).negate();
+
+                let mx = joyX;
+                let mz = joyY;
+
+                if(keys['KeyW']) mz = -1; if(keys['KeyS']) mz = 1;  
+                if(keys['KeyA']) mx = -1; if(keys['KeyD']) mx = 1;  
+
+                if(Math.abs(mx) > 0.1 || Math.abs(mz) > 0.1) {
+                    player.position.addScaledVector(f, -mz * moveSpeed);
+                    player.position.addScaledVector(r, mx * moveSpeed);
+                    
+                    let rotBase = Math.atan2(-mx, -mz) + camRot;
+                    player.rotation.y = animInverted ? rotBase + Math.PI : rotBase;
+                    fadeToAction('walk');
+                } else { 
+                    fadeToAction('idle'); 
+                }
+
+                if(!fly) {
+                    player.position.y += velY;
+                    velY -= 0.035;
+                    raycaster.set(new THREE.Vector3(player.position.x, player.position.y + 10, player.position.z), new THREE.Vector3(0, -1, 0));
+                    let hits = raycaster.intersectObject(mapModel, true);
+                    if(hits.length > 0 && hits[0].distance < 10.2 && velY <= 0) {
+                        player.position.y = hits[0].point.y;
+                        velY = 0; grounded = true;
+                    } else { grounded = false; }
+                } else { 
+                    player.position.y += velY; 
+                    velY *= 0.9; 
+                }
+
+                if(player.position.y < -200) respawn();
+
+                camera.position.set(player.position.x + Math.sin(camRot)*camDist, player.position.y + camDist*0.5, player.position.z + Math.cos(camRot)*camDist);
+                camera.lookAt(player.position.x, player.position.y + 3, player.position.z);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            if (!gameStarted) return;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
